@@ -8,12 +8,21 @@
 
 package org.locationtech.geomesa.cassandra.spark
 
+import java.nio.file.{Files, Path}
+
+import com.datastax.driver.core.{Cluster, SocketOptions}
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{SparkConf, SparkContext}
+import org.cassandraunit.CQLDataLoader
+import org.cassandraunit.dataset.cql.ClassPathCQLDataSet
+import org.cassandraunit.utils.EmbeddedCassandraServerHelper
 import org.geotools.data.{DataStoreFinder, Query, Transaction}
 import org.junit.runner.RunWith
+import org.locationtech.geomesa.cassandra.data.CassandraDataStore
+import org.locationtech.geomesa.cassandra.data.CassandraDataStoreFactory.Params
 import org.locationtech.geomesa.features.ScalaSimpleFeature
 import org.locationtech.geomesa.spark.{GeoMesaSpark, GeoMesaSparkKryoRegistrator}
+import org.locationtech.geomesa.utils.conf.GeoMesaSystemProperties.SystemProperty
 import org.locationtech.geomesa.utils.geotools.{FeatureUtils, SimpleFeatureTypes}
 import org.locationtech.geomesa.utils.io.WithClose
 import org.opengis.feature.simple.SimpleFeature
@@ -25,16 +34,50 @@ import scala.collection.JavaConversions._
 @RunWith(classOf[JUnitRunner])
 class CassandraSparkProviderTest extends Specification {
 
+  sequential
+
+  var storage: Path = _
+  var params: Map[String, String] = _
+  var ds: CassandraDataStore = _
+
   var sc: SparkContext = _
 
   step {
+    // cassandra database set up
+    storage = Files.createTempDirectory("cassandra")
+
+    System.setProperty("cassandra.storagedir", storage.toString)
+
+    EmbeddedCassandraServerHelper.startEmbeddedCassandra("cassandra-config.yaml", 1200000L)
+
+    var readTimeout: Int = SystemProperty("cassandraReadTimeout", "12000").get.toInt
+
+    if (readTimeout < 0) {
+      readTimeout = 12000
+    }
+    val host = EmbeddedCassandraServerHelper.getHost
+    val port = EmbeddedCassandraServerHelper.getNativeTransportPort
+    val cluster = new Cluster.Builder().addContactPoints(host).withPort(port)
+      .withSocketOptions(new SocketOptions().setReadTimeoutMillis(readTimeout)).build().init()
+    val session = cluster.connect()
+    val cqlDataLoader = new CQLDataLoader(session)
+    cqlDataLoader.load(new ClassPathCQLDataSet("init.cql", false, false))
+
+    // add geotools flag to param map for Spark
+    params = Map(
+      Params.ContactPointParam.getName -> s"$host:$port",
+      Params.KeySpaceParam.getName -> "geomesa_cassandra",
+      Params.CatalogParam.getName -> "test_sft",
+      "geotools" -> "true"
+    )
+    ds = DataStoreFinder.getDataStore(params).asInstanceOf[CassandraDataStore]
+
+    // Spark set up
     val conf = new SparkConf().setMaster("local[2]").setAppName("testSpark")
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.kryo.registrator", classOf[GeoMesaSparkKryoRegistrator].getName)
     sc = SparkContext.getOrCreate(conf)
   }
-
-  val dsParams = Map("cqengine" -> "true", "geotools" -> "true")
 
   lazy val chicagoSft =
     SimpleFeatureTypes.createType("chicago",
@@ -51,23 +94,23 @@ class CassandraSparkProviderTest extends Specification {
 
   "The GeoToolsSpatialRDDProvider" should {
     "read from the in-memory database" in {
-      val ds = DataStoreFinder.getDataStore(dsParams)
+      val ds = DataStoreFinder.getDataStore(params)
       ds.createSchema(chicagoSft)
       WithClose(ds.getFeatureWriterAppend("chicago", Transaction.AUTO_COMMIT)) { writer =>
         chicagoFeatures.take(3).foreach(FeatureUtils.write(writer, _, useProvidedFid = true))
       }
 
-      val rdd = GeoMesaSpark(dsParams).rdd(new Configuration(), sc, dsParams, new Query("chicago"))
+      val rdd = GeoMesaSpark(params).rdd(new Configuration(), sc, params, new Query("chicago"))
       rdd.count() mustEqual 3l
     }
 
     "write to the in-memory database" in {
-      val ds = DataStoreFinder.getDataStore(dsParams)
+      val ds = DataStoreFinder.getDataStore(params)
       ds.createSchema(chicagoSft)
       val writeRdd = sc.parallelize(chicagoFeatures)
-      GeoMesaSpark(dsParams).save(writeRdd, dsParams, "chicago")
+      GeoMesaSpark(params).save(writeRdd, params, "chicago")
       // verify write
-      val readRdd = GeoMesaSpark(dsParams).rdd(new Configuration(), sc, dsParams, new Query("chicago"))
+      val readRdd = GeoMesaSpark(params).rdd(new Configuration(), sc, params, new Query("chicago"))
       readRdd.count() mustEqual 6l
     }
   }
