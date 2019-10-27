@@ -92,7 +92,7 @@ class CassandraSparkProviderTest extends Specification {
     ScalaSimpleFeature.create(chicagoSft, "6", "true", 6, "2016-01-03T00:00:00.000Z", "POINT (-79.0 37.5)")
   )
 
-  "The GeoToolsSpatialRDDProvider" should {
+  "The CassandraSpatialRDDProvider" should {
     "read from the in-memory database" in {
       val ds = DataStoreFinder.getDataStore(params)
       ds.createSchema(chicagoSft)

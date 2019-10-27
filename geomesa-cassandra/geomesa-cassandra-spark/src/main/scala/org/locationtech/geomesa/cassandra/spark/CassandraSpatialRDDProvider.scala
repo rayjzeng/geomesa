@@ -6,18 +6,19 @@
  * http://www.opensource.org/licenses/apache2.0.php.
  ***********************************************************************/
 
-package org.locationtech.geomesa.spark.cassandra
+package org.locationtech.geomesa.cassandra.spark
 
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.geotools.data.{DataStore, Query, Transaction}
-import org.locationtech.geomesa.spark.{DataStoreConnector, SpatialRDD, SpatialRDDProvider}
-import org.opengis.feature.simple.SimpleFeature
+import org.geotools.data.{Query, Transaction}
 import org.locationtech.geomesa.cassandra.data.{CassandraDataStore, CassandraDataStoreFactory}
+import org.locationtech.geomesa.spark.{DataStoreConnector, SpatialRDD, SpatialRDDProvider}
 import org.locationtech.geomesa.utils.collection.CloseableIterator
+import org.locationtech.geomesa.utils.geotools.FeatureUtils
 import org.locationtech.geomesa.utils.io.{WithClose, WithStore}
+import org.opengis.feature.simple.SimpleFeature
 
 class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
 
@@ -33,8 +34,8 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
     val _ = DataStoreConnector[CassandraDataStore](dsParams)
 
     // Base implementation from GeoToolsSpatialRDDProvider
-    WithStore[DataStore](dsParams) { ds =>
-      val (sft, features) = WithClose(ds.getFeatureReader(query, Transaction.AUTO_COMMIT)) { reader =>
+    WithStore[CassandraDataStore](dsParams) { ds =>
+      val (sft, features) = WithClose(ds.getFeatureReader(origQuery, Transaction.AUTO_COMMIT)) { reader =>
         (reader.getFeatureType, CloseableIterator(reader).toList)
       }
       SpatialRDD(sc.parallelize(features), sft)
@@ -50,6 +51,22 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
     * @param writeTypeName type name
     */
   def save(rdd: RDD[SimpleFeature], writeDataStoreParams: Map[String, String], writeTypeName: String): Unit = {
+
+    // Base implementation from GeoToolsSpatialRDDProvider
+    val params = writeDataStoreParams
+    val typeName = writeTypeName
+    WithStore[CassandraDataStore](params) { ds =>
+      require(ds != null, "Could not load data store with the provided parameters")
+      require(ds.getSchema(typeName) != null, "Schema must exist before calling save - use `DataStore.createSchema`")
+    }
+
+    rdd.foreachPartition { iter =>
+      WithStore[CassandraDataStore](params) { ds =>
+        WithClose(ds.getFeatureWriterAppend(typeName, Transaction.AUTO_COMMIT)) { writer =>
+          iter.foreach(FeatureUtils.write(writer, _, useProvidedFid = true))
+        }
+      }
+    }
   }
 
   /**
