@@ -12,7 +12,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.geotools.data.{Query, Transaction}
+import org.geotools.data.{DataStore, DataStoreFinder, Query, Transaction}
 import org.locationtech.geomesa.cassandra.data.{CassandraDataStore, CassandraDataStoreFactory}
 import org.locationtech.geomesa.spark.{DataStoreConnector, SpatialRDD, SpatialRDDProvider}
 import org.locationtech.geomesa.utils.collection.CloseableIterator
@@ -22,8 +22,15 @@ import org.opengis.feature.simple.SimpleFeature
 
 class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
 
-  override def canProcess(params: java.util.Map[String, _ <: java.io.Serializable]): Boolean =
-    CassandraDataStoreFactory.canProcess(params)
+  import scala.collection.JavaConverters._
+
+  override def canProcess(params: java.util.Map[String, _ <: java.io.Serializable]): Boolean = {
+//    CassandraDataStoreFactory.canProcess(params)
+
+    // Base implementation from GeoToolsSpatialRDDProvider
+    val parameters = params.asInstanceOf[java.util.Map[String, java.io.Serializable]]
+    DataStoreFinder.getAllDataStores.asScala.exists(_.canProcess(parameters))
+  }
 
   def rdd(
       conf: Configuration,
@@ -34,7 +41,7 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
     val _ = DataStoreConnector[CassandraDataStore](dsParams)
 
     // Base implementation from GeoToolsSpatialRDDProvider
-    WithStore[CassandraDataStore](dsParams) { ds =>
+    WithStore[DataStore](dsParams) { ds =>
       val (sft, features) = WithClose(ds.getFeatureReader(origQuery, Transaction.AUTO_COMMIT)) { reader =>
         (reader.getFeatureType, CloseableIterator(reader).toList)
       }
@@ -55,13 +62,13 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
     // Base implementation from GeoToolsSpatialRDDProvider
     val params = writeDataStoreParams
     val typeName = writeTypeName
-    WithStore[CassandraDataStore](params) { ds =>
+    WithStore[DataStore](params) { ds =>
       require(ds != null, "Could not load data store with the provided parameters")
       require(ds.getSchema(typeName) != null, "Schema must exist before calling save - use `DataStore.createSchema`")
     }
 
     rdd.foreachPartition { iter =>
-      WithStore[CassandraDataStore](params) { ds =>
+      WithStore[DataStore](params) { ds =>
         WithClose(ds.getFeatureWriterAppend(typeName, Transaction.AUTO_COMMIT)) { writer =>
           iter.foreach(FeatureUtils.write(writer, _, useProvidedFid = true))
         }
