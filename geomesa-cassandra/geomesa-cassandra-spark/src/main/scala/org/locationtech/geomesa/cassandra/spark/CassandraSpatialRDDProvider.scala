@@ -12,7 +12,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.geotools.data.{DataStore, DataStoreFinder, Query, Transaction}
+import org.geotools.data.{DataStore, Query, Transaction}
 import org.locationtech.geomesa.cassandra.data.{CassandraDataStore, CassandraDataStoreFactory}
 import org.locationtech.geomesa.spark.{DataStoreConnector, SpatialRDD, SpatialRDDProvider}
 import org.locationtech.geomesa.utils.collection.CloseableIterator
@@ -22,14 +22,8 @@ import org.opengis.feature.simple.SimpleFeature
 
 class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
 
-  import scala.collection.JavaConverters._
-
   override def canProcess(params: java.util.Map[String, _ <: java.io.Serializable]): Boolean = {
-//    CassandraDataStoreFactory.canProcess(params)
-
-    // Base implementation from GeoToolsSpatialRDDProvider
-    val parameters = params.asInstanceOf[java.util.Map[String, java.io.Serializable]]
-    DataStoreFinder.getAllDataStores.asScala.exists(_.canProcess(parameters))
+    CassandraDataStoreFactory.canProcess(params)
   }
 
   def rdd(

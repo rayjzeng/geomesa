@@ -92,7 +92,7 @@ class CassandraSparkProviderTest extends Specification {
   )
 
   "The CassandraSpatialRDDProvider" should {
-    "read from the in-memory database" in {
+    "read from the embedded Cassandra database" in {
       val ds = DataStoreFinder.getDataStore(params)
       ds.createSchema(chicagoSft)
       WithClose(ds.getFeatureWriterAppend("chicago", Transaction.AUTO_COMMIT)) { writer =>
@@ -103,7 +103,7 @@ class CassandraSparkProviderTest extends Specification {
       rdd.count() mustEqual 3l
     }
 
-    "write to the in-memory database" in {
+    "write to the embedded Cassandra database" in {
       val ds = DataStoreFinder.getDataStore(params)
       ds.createSchema(chicagoSft)
       val writeRdd = sc.parallelize(chicagoFeatures)
