@@ -32,7 +32,8 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
       dsParams: Map[String, String],
       origQuery: Query): SpatialRDD = {
 
-    val _ = DataStoreConnector[CassandraDataStore](dsParams)
+    val ds = DataStoreConnector[CassandraDataStore](dsParams)
+    lazy val sft = ds.getSchema(origQuery.getTypeName)
 
     // Base implementation from GeoToolsSpatialRDDProvider
     WithStore[DataStore](dsParams) { ds =>
