@@ -19,6 +19,7 @@ import org.locationtech.geomesa.utils.collection.CloseableIterator
 import org.locationtech.geomesa.utils.geotools.FeatureUtils
 import org.locationtech.geomesa.utils.io.{WithClose, WithStore}
 import org.opengis.feature.simple.SimpleFeature
+//import org.locationtech.geomesa.cassandra.jobs.CassandraJobUtils
 
 class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
 
@@ -34,6 +35,9 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
 
     val ds = DataStoreConnector[CassandraDataStore](dsParams)
     lazy val sft = ds.getSchema(origQuery.getTypeName)
+//    lazy val qps = {
+//      CassandraJobUtils.getMultiStatementPlans(ds, origQuery)
+//    }
 
     // Base implementation from GeoToolsSpatialRDDProvider
     WithStore[DataStore](dsParams) { ds =>
@@ -69,17 +73,5 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
         }
       }
     }
-  }
-
-  /**
-    * Writes this RDD to a GeoMesa table.
-    * The type must exist in the data store, and all of the features in the RDD must be of this type.
-    * This method assumes that the schema exists.
-    *
-    * @param rdd rdd
-    * @param writeDataStoreParams params
-    * @param writeTypeName type name
-    */
-  def unsafeSave(rdd: RDD[SimpleFeature], writeDataStoreParams: Map[String, String], writeTypeName: String): Unit = {
   }
 }
