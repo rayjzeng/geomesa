@@ -54,12 +54,12 @@
         </dependency>
         <dependency>
             <groupId>org.locationtech.geomesa</groupId>
-            <artifactId>geomesa-gt-spark_2.11</artifactId>
+            <artifactId>geomesa-gt-spark_${scala.binary.version}</artifactId>
         </dependency>
-<!--        <dependency>-->
-<!--            <groupId>org.locationtech.geomesa</groupId>-->
-<!--            <artifactId>geomesa-cassandra-jobs_$(scala.binary.version}</artifactId>-->
-<!--        </dependency>-->
+        <dependency>
+            <groupId>org.locationtech.geomesa</groupId>
+            <artifactId>geomesa-cassandra-jobs_${scala.binary.version}</artifactId>
+        </dependency>
 
         <!-- Spark Dependencies -->
         <dependency>
