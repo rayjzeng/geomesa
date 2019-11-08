@@ -19,7 +19,7 @@ import org.locationtech.geomesa.utils.collection.CloseableIterator
 import org.locationtech.geomesa.utils.geotools.FeatureUtils
 import org.locationtech.geomesa.utils.io.{WithClose, WithStore}
 import org.opengis.feature.simple.SimpleFeature
-//import org.locationtech.geomesa.cassandra.jobs.CassandraJobUtils
+import org.locationtech.geomesa.cassandra.jobs.CassandraJobUtils
 
 class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
 
@@ -35,9 +35,9 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
 
     val ds = DataStoreConnector[CassandraDataStore](dsParams)
     lazy val sft = ds.getSchema(origQuery.getTypeName)
-//    lazy val qps = {
-//      CassandraJobUtils.getMultiStatementPlans(ds, origQuery)
-//    }
+    lazy val qps = {
+      CassandraJobUtils.getMultiStatementPlans(ds, origQuery)
+    }
 
     // Base implementation from GeoToolsSpatialRDDProvider
     WithStore[DataStore](dsParams) { ds =>
