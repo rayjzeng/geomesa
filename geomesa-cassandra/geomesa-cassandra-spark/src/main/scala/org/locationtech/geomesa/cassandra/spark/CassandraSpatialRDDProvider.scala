@@ -10,17 +10,18 @@ package org.locationtech.geomesa.cassandra.spark
 
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.io.Text
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{NewHadoopRDD, RDD}
 import org.geotools.data.{DataStore, Query, Transaction}
-import org.locationtech.geomesa.cassandra.data.{CassandraDataStore, CassandraDataStoreFactory}
+import org.locationtech.geomesa.cassandra.data.{CassandraDataStore, CassandraDataStoreFactory, CassandraQueryPlan, EmptyPlan}
 import org.locationtech.geomesa.spark.{DataStoreConnector, SpatialRDD, SpatialRDDProvider}
 import org.locationtech.geomesa.utils.collection.CloseableIterator
 import org.locationtech.geomesa.utils.geotools.FeatureUtils
 import org.locationtech.geomesa.utils.io.{WithClose, WithStore}
-import org.opengis.feature.simple.SimpleFeature
+import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
 import org.locationtech.geomesa.cassandra.jobs.CassandraJobUtils
-
+import org.locationtech.geomesa.index.api.QueryPlan
 import org.apache.cassandra.hadoop.cql3.CqlConfigHelper
 import org.apache.cassandra.hadoop.cql3.CqlInputFormat
 import org.apache.hadoop.conf.Configuration
@@ -28,9 +29,7 @@ import org.apache.hadoop.conf.Configured
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.LongWritable
-import org.apache.hadoop.mapreduce.Job
-import org.apache.hadoop.mapreduce.Mapper
-import org.apache.hadoop.mapreduce.Reducer
+import org.apache.hadoop.mapreduce.{InputFormat, Job, Mapper, Reducer}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.util.Tool
 import org.apache.hadoop.util.ToolRunner
@@ -58,8 +57,19 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
     }
 
     lazy val _ = qps.map { qp =>
-      val tablename = qp.tables.head  // each query plan has a single table
+      val tablename = qp.tables.head // each query plan has a single table
+    }
 
+    // TODO: Set SimpleFeature as return type when done.
+    def queryPlanToRdd(sft: SimpleFeatureType, qp: CassandraQueryPlan, conf: Configuration) = {
+      if (ds == null || sft == null || qp.isInstanceOf[EmptyPlan]) {
+        sc.emptyRDD[SimpleFeature]
+      } else {
+        CqlConfigHelper.setInputCql(conf, qp.tables.head)
+      }
+
+      // Dummy line
+      new NewHadoopRDD(sc, classOf[InputFormat[Any, Row]], classOf[Any], classOf[Row], conf).map(_._2)
     }
 
     // Base implementation from GeoToolsSpatialRDDProvider
@@ -84,13 +94,13 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
     // Base implementation from GeoToolsSpatialRDDProvider
     val params = writeDataStoreParams
     val typeName = writeTypeName
-    WithStore[DataStore](params) { ds =>
+    WithStore[CassandraDataStore](params) { ds =>
       require(ds != null, "Could not load data store with the provided parameters")
       require(ds.getSchema(typeName) != null, "Schema must exist before calling save - use `DataStore.createSchema`")
     }
 
     rdd.foreachPartition { iter =>
-      WithStore[DataStore](params) { ds =>
+      WithStore[CassandraDataStore](params) { ds =>
         WithClose(ds.getFeatureWriterAppend(typeName, Transaction.AUTO_COMMIT)) { writer =>
           iter.foreach(FeatureUtils.write(writer, _, useProvidedFid = true))
         }
