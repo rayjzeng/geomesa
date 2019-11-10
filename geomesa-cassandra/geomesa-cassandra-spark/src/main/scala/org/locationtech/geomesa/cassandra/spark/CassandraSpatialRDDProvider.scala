@@ -21,6 +21,24 @@ import org.locationtech.geomesa.utils.io.{WithClose, WithStore}
 import org.opengis.feature.simple.SimpleFeature
 import org.locationtech.geomesa.cassandra.jobs.CassandraJobUtils
 
+import org.apache.cassandra.hadoop.cql3.CqlConfigHelper
+import org.apache.cassandra.hadoop.cql3.CqlInputFormat
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.conf.Configured
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.Text
+import org.apache.hadoop.io.LongWritable
+import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.mapreduce.Mapper
+import org.apache.hadoop.mapreduce.Reducer
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
+import org.apache.hadoop.util.Tool
+import org.apache.hadoop.util.ToolRunner
+import com.datastax.driver.core.Row
+import org.apache.cassandra.hadoop.ConfigHelper
+import org.apache.cassandra.utils.ByteBufferUtil
+
+
 class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
 
   override def canProcess(params: java.util.Map[String, _ <: java.io.Serializable]): Boolean = {
@@ -37,6 +55,11 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
     lazy val sft = ds.getSchema(origQuery.getTypeName)
     lazy val qps = {
       CassandraJobUtils.getMultiStatementPlans(ds, origQuery)
+    }
+
+    lazy val _ = qps.map { qp =>
+      val tablename = qp.tables.head  // each query plan has a single table
+
     }
 
     // Base implementation from GeoToolsSpatialRDDProvider
