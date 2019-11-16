@@ -112,21 +112,22 @@ class CqlSelectAllTest extends Specification {
 
   "The CassandraSpatialRDDProvider" should {
     "read from the embedded Cassandra database" in {
-      val ds = DataStoreFinder.getDataStore(params)
       ds.createSchema(chicagoSft)
       WithClose(ds.getFeatureWriterAppend("chicago", Transaction.AUTO_COMMIT)) { writer =>
         chicagoFeatures.take(3).foreach(FeatureUtils.write(writer, _, useProvidedFid = true))
       }
-//      var job = new Job(getConf(),"selectall") //instantiate new job
-//      var test_query = new Query(typename="chicago") //Create new Query
-//      lazy val qps = { //Create Query Plan Statement
-//        CassandraJobUtils.getMultiStatementPlans(ds, test_query)
-//      }
 
-//      lazy val tablename = params(Params.KeySpaceParam.getName)
-      // TODO: create a new job?
-      ConfigHelper.setOutputColumnFamily(job.getConfiguration(), "geomesa cassandra", "chicago")
-      CqlConfigHelper.setInputCql(new Configuration(), "select * from " + "chicago")
+      val job_conf = new Configuration()
+      val job = Job.getInstance(job_conf,"selectall")  // instantiate new job
+
+      ConfigHelper.setInputInitialAddress(job.getConfiguration, params(Params.ContactPointParam.getName))
+
+      ConfigHelper.setOutputColumnFamily(job.getConfiguration, "geomesa_cassandra", "chicago")
+      job.setInputFormatClass(classOf[CqlInputFormat])
+      CqlConfigHelper.setInputCql(job.getConfiguration, "select * from " + "chicago")
+
+      job.setMapOutputKeyClass(classOf[Text])
+      job.setMapOutputValueClass(classOf[SimpleFeature])
 
 //      val OUTPUT_PLAN_PREFIX = "tmp/read_results"
 //      FileOutputFormat.setOutputPath(job, new Path(OUTPUT_PATH_PREFIX))
