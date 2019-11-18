@@ -36,6 +36,7 @@ import org.apache.hadoop.util.ToolRunner
 import com.datastax.driver.core.Row
 import org.apache.cassandra.hadoop.ConfigHelper
 import org.apache.cassandra.utils.ByteBufferUtil
+import org.locationtech.geomesa.jobs.GeoMesaConfigurator
 
 
 class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
@@ -52,15 +53,7 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
 
     val ds = DataStoreConnector[CassandraDataStore](dsParams)
     lazy val sft = ds.getSchema(origQuery.getTypeName)
-    lazy val qps = {
-      CassandraJobUtils.getMultiStatementPlans(ds, origQuery)
-    }
 
-    lazy val _ = qps.map { qp =>
-      val tablename = qp.tables.head // each query plan has a single table
-    }
-
-    // TODO: Set SimpleFeature as return type when done.
     def queryPlanToRdd(sft: SimpleFeatureType, qp: CassandraQueryPlan, conf: Configuration) = {
       if (ds == null || sft == null || qp.isInstanceOf[EmptyPlan]) {
         sc.emptyRDD[SimpleFeature]
@@ -68,17 +61,35 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
         CqlConfigHelper.setInputCql(conf, qp.tables.head)
       }
 
-      // Dummy line
-      new NewHadoopRDD(sc, classOf[InputFormat[Any, Row]], classOf[Any], classOf[Row], conf).map(_._2)
+      ConfigHelper.setInputInitialAddress(conf, "localhost")
+
+      ConfigHelper.setInputColumnFamily(conf, "geomesa_cassandra", "chicago")
+//      job.setInputFormatClass(classOf[CqlInputFormat])
+
+//      job.setMapOutputKeyClass(classOf[Text])
+//      job.setMapOutputValueClass(classOf[SimpleFeature])
+      ConfigHelper.setInputPartitioner(conf, "Murmur3Partitioner")
+
+      GeoMesaConfigurator.setResultsToFeatures(conf, qp.resultsToFeatures)
+      qp.reducer.foreach(GeoMesaConfigurator.setReducer(conf,_))
+
+      new NewHadoopRDD(sc, classOf[GeoMesaCassandraInputFormat], classOf[Text], classOf[SimpleFeature], conf).map(_._2)
     }
 
-    // Base implementation from GeoToolsSpatialRDDProvider
-    WithStore[DataStore](dsParams) { ds =>
-      val (sft, features) = WithClose(ds.getFeatureReader(origQuery, Transaction.AUTO_COMMIT)) { reader =>
-        (reader.getFeatureType, CloseableIterator(reader).toList)
+    try {
+      lazy val transform = origQuery.getHints.getTransformSchema
+
+      lazy val qps = {
+        CassandraJobUtils.getMultiStatementPlans(ds, origQuery)
       }
-      SpatialRDD(sc.parallelize(features), sft)
+
+      if (ds == null || sft == null || qps.isEmpty) {
+        SpatialRDD(sc.emptyRDD[SimpleFeature], rddSft)
+      }
+
+
     }
+
   }
 
   /**
