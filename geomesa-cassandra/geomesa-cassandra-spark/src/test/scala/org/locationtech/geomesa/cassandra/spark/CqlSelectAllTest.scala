@@ -9,6 +9,7 @@
 package org.locationtech.geomesa.cassandra.spark
 
 import java.nio.file.{Files, Path}
+import java.util
 
 import com.datastax.driver.core.{Cluster, SocketOptions}
 import org.apache.hadoop.conf.{Configuration, Configured}
@@ -28,25 +29,23 @@ import org.locationtech.geomesa.utils.io.WithClose
 import org.opengis.feature.simple.SimpleFeature
 import org.specs2.mutable.Specification
 import org.specs2.runner.JUnitRunner
-import org.apache.hadoop.mapreduce.Job
-import org.apache.cassandra.hadoop.cql3.CqlConfigHelper
+import org.apache.hadoop.mapreduce._
 import org.locationtech.geomesa.cassandra.jobs.CassandraJobUtils
 import org.apache.cassandra.hadoop.cql3.CqlConfigHelper
 import org.apache.cassandra.hadoop.cql3.CqlInputFormat
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.LongWritable
-import org.apache.hadoop.mapreduce.Job
-import org.apache.hadoop.mapreduce.Mapper
-import org.apache.hadoop.mapreduce.Reducer
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.util.Tool
 import org.apache.hadoop.util.ToolRunner
 import com.datastax.driver.core.Row
+import com.typesafe.scalalogging.LazyLogging
 import org.apache.cassandra.hadoop.ConfigHelper
 import org.apache.cassandra.utils.ByteBufferUtil
 import org.apache.hadoop.io.LongWritable
 import org.apache.spark.SparkContext
+import org.apache.spark.rdd.NewHadoopRDD
 
 import scala.collection.JavaConversions._
 
@@ -117,21 +116,25 @@ class CqlSelectAllTest extends Specification {
         chicagoFeatures.take(3).foreach(FeatureUtils.write(writer, _, useProvidedFid = true))
       }
 
-      val job_conf = new Configuration()
-      val job = Job.getInstance(job_conf,"selectall")  // instantiate new job
+      val job: Job = Job.getInstance(new Configuration(),"selectall")  // instantiate new job
 
-      ConfigHelper.setInputInitialAddress(job.getConfiguration, params(Params.ContactPointParam.getName))
+      ConfigHelper.setInputInitialAddress(job.getConfiguration, "localhost")
 
-      ConfigHelper.setOutputColumnFamily(job.getConfiguration, "geomesa_cassandra", "chicago")
+      ConfigHelper.setInputColumnFamily(job.getConfiguration, "geomesa_cassandra", "chicago")
       job.setInputFormatClass(classOf[CqlInputFormat])
       CqlConfigHelper.setInputCql(job.getConfiguration, "select * from " + "chicago")
 
       job.setMapOutputKeyClass(classOf[Text])
       job.setMapOutputValueClass(classOf[SimpleFeature])
+      ConfigHelper.setInputPartitioner(job.getConfiguration, "Murmur3Partitioner")
 
 //      val OUTPUT_PLAN_PREFIX = "tmp/read_results"
 //      FileOutputFormat.setOutputPath(job, new Path(OUTPUT_PATH_PREFIX))
 //      job.waitForCompletion(true)
+
+      val rdd = new NewHadoopRDD(sc, classOf[GeoMesaCassandraInputFormat], classOf[Text], classOf[SimpleFeature], job.getConfiguration).map(_._2)
+      rdd.count
+      true mustEqual(true)
     }
 
   }

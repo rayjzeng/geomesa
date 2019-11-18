@@ -42,5 +42,7 @@ class GeoMesaCassandraInputFormat extends InputFormat[Text, SimpleFeature] with 
     splits
   }
 
-  override def createRecordReader(inputSplit: InputSplit, taskAttemptContext: TaskAttemptContext): RecordReader[Text, SimpleFeature] = ???
+  override def createRecordReader(inputSplit: InputSplit, taskAttemptContext: TaskAttemptContext): RecordReader[Text, SimpleFeature] = {
+    ???
+  }
 }
