@@ -9,34 +9,27 @@
 package org.locationtech.geomesa.cassandra.spark
 
 import com.typesafe.scalalogging.LazyLogging
+
+import org.apache.cassandra.hadoop.ConfigHelper
+import org.apache.cassandra.hadoop.cql3.CqlConfigHelper
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
+
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.{NewHadoopRDD, RDD}
-import org.geotools.data.{DataStore, Query, Transaction}
+import org.apache.spark.rdd.RDD
+
+import org.geotools.data.{Query, Transaction}
+import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
+
 import org.locationtech.geomesa.cassandra.data.{CassandraDataStore, CassandraDataStoreFactory, CassandraQueryPlan, EmptyPlan}
+import org.locationtech.geomesa.cassandra.jobs.CassandraJobUtils
+import org.locationtech.geomesa.index.conf.QueryHints._ //import everything from Query Hints
+import org.locationtech.geomesa.jobs.GeoMesaConfigurator
 import org.locationtech.geomesa.spark.{DataStoreConnector, SpatialRDD, SpatialRDDProvider}
-import org.locationtech.geomesa.utils.collection.CloseableIterator
 import org.locationtech.geomesa.utils.geotools.FeatureUtils
 import org.locationtech.geomesa.utils.io.{WithClose, WithStore}
-import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
-import org.locationtech.geomesa.cassandra.jobs.CassandraJobUtils
-import org.locationtech.geomesa.index.api.QueryPlan
-import org.apache.cassandra.hadoop.cql3.CqlConfigHelper
-import org.apache.cassandra.hadoop.cql3.CqlInputFormat
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.conf.Configured
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.Text
-import org.apache.hadoop.io.LongWritable
-import org.apache.hadoop.mapreduce.{InputFormat, Job, Mapper, Reducer}
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
-import org.apache.hadoop.util.Tool
-import org.apache.hadoop.util.ToolRunner
-import com.datastax.driver.core.Row
-import org.apache.cassandra.hadoop.ConfigHelper
-import org.apache.cassandra.utils.ByteBufferUtil
-import org.locationtech.geomesa.jobs.GeoMesaConfigurator
+
 
 
 class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
@@ -54,30 +47,26 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
     val ds = DataStoreConnector[CassandraDataStore](dsParams)
     lazy val sft = ds.getSchema(origQuery.getTypeName)
 
-    def queryPlanToRdd(sft: SimpleFeatureType, qp: CassandraQueryPlan, conf: Configuration) = {
+    def queryPlanToRdd(qp: CassandraQueryPlan) : RDD[SimpleFeature] = {
+      val config = new Configuration(conf)
       if (ds == null || sft == null || qp.isInstanceOf[EmptyPlan]) {
         sc.emptyRDD[SimpleFeature]
       } else {
-        CqlConfigHelper.setInputCql(conf, qp.tables.head)
+        CqlConfigHelper.setInputCql(config, qp.tables.head)
       }
 
-      ConfigHelper.setInputInitialAddress(conf, "localhost")
+      ConfigHelper.setInputInitialAddress(config, "localhost")
+      ConfigHelper.setInputColumnFamily(config, "geomesa_cassandra", "chicago")
+      ConfigHelper.setInputPartitioner(config, "Murmur3Partitioner")
 
-      ConfigHelper.setInputColumnFamily(conf, "geomesa_cassandra", "chicago")
-//      job.setInputFormatClass(classOf[CqlInputFormat])
+      GeoMesaConfigurator.setResultsToFeatures(config, qp.resultsToFeatures)
+      qp.reducer.foreach(GeoMesaConfigurator.setReducer(config,_))
 
-//      job.setMapOutputKeyClass(classOf[Text])
-//      job.setMapOutputValueClass(classOf[SimpleFeature])
-      ConfigHelper.setInputPartitioner(conf, "Murmur3Partitioner")
-
-      GeoMesaConfigurator.setResultsToFeatures(conf, qp.resultsToFeatures)
-      qp.reducer.foreach(GeoMesaConfigurator.setReducer(conf,_))
-
-      new NewHadoopRDD(sc, classOf[GeoMesaCassandraInputFormat], classOf[Text], classOf[SimpleFeature], conf).map(_._2)
+      sc.newAPIHadoopRDD(config, classOf[GeoMesaCassandraInputFormat], classOf[Text], classOf[SimpleFeature]).map(_._2)
     }
 
     try {
-      lazy val transform = origQuery.getHints.getTransformSchema
+      lazy val rddSft = origQuery.getHints.getTransformSchema.getOrElse(sft)
 
       lazy val qps = {
         CassandraJobUtils.getMultiStatementPlans(ds, origQuery)
@@ -85,9 +74,18 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
 
       if (ds == null || sft == null || qps.isEmpty) {
         SpatialRDD(sc.emptyRDD[SimpleFeature], rddSft)
+      } else {
+        val rdd = qps.map(queryPlanToRdd) match {
+          case Seq(head) => head
+          case seq => sc.union(seq)
+        }
+        SpatialRDD(rdd, rddSft)
       }
 
-
+    } finally {
+      if (ds != null) {
+        ds.dispose()
+      }
     }
 
   }
