@@ -52,8 +52,6 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
       val config = new Configuration(conf)
       if (ds == null || sft == null || qp.isInstanceOf[EmptyPlan]) {
         sc.emptyRDD[SimpleFeature]
-      } else {
-        CqlConfigHelper.setInputCql(config, qp.tables.head)
       }
 
       ConfigHelper.setInputInitialAddress(config, dsParams("geomesa.cassandra.host"))
@@ -62,6 +60,13 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
 
       GeoMesaConfigurator.setResultsToFeatures(config, qp.resultsToFeatures)
       qp.reducer.foreach(GeoMesaConfigurator.setReducer(config,_))
+      GeoMesaConfigurator.setFilter(config, qp.filter.toString)
+      if (qp.projection.isDefined) {
+        GeoMesaConfigurator.setProjection(config, qp.projection.get)
+      }
+      if (qp.sort.isDefined) {
+        GeoMesaConfigurator.setSorting(config, qp.sort.get)
+      }
 
       sc.newAPIHadoopRDD(config, classOf[GeoMesaCassandraInputFormat], classOf[Text], classOf[SimpleFeature]).map(_._2)
     }
