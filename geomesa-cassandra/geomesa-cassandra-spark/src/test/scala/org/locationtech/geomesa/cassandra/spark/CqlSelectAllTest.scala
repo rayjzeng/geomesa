@@ -46,6 +46,7 @@ import org.apache.cassandra.utils.ByteBufferUtil
 import org.apache.hadoop.io.LongWritable
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.NewHadoopRDD
+import org.locationtech.geomesa.jobs.GeoMesaConfigurator
 
 import scala.collection.JavaConversions._
 
@@ -128,7 +129,9 @@ class CqlSelectAllTest extends Specification {
       job.setMapOutputValueClass(classOf[SimpleFeature])
       ConfigHelper.setInputPartitioner(job.getConfiguration, "Murmur3Partitioner")
 
-//      val OUTPUT_PLAN_PREFIX = "tmp/read_results"
+//      GeoMesaConfigurator.setResultsToFeatures(conf, qp.resultsToFeatures)
+
+      //      val OUTPUT_PLAN_PREFIX = "tmp/read_results"
 //      FileOutputFormat.setOutputPath(job, new Path(OUTPUT_PATH_PREFIX))
 //      job.waitForCompletion(true)
 

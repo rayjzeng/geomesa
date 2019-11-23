@@ -78,6 +78,10 @@
             <groupId>org.locationtech.geomesa</groupId>
             <artifactId>geomesa-cassandra-jobs_${scala.binary.version}</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.locationtech.geomesa</groupId>
+            <artifactId>geomesa-jobs_${scala.binary.version}</artifactId>
+        </dependency>
 
         <!-- Spark Dependencies -->
         <dependency>
