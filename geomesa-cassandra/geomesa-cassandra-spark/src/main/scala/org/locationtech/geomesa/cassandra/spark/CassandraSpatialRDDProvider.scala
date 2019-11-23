@@ -20,9 +20,10 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 
 import org.geotools.data.{Query, Transaction}
-import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
+import org.opengis.feature.simple.SimpleFeature
 
 import org.locationtech.geomesa.cassandra.data.{CassandraDataStore, CassandraDataStoreFactory, CassandraQueryPlan, EmptyPlan}
+import org.locationtech.geomesa.cassandra.data.CassandraDataStoreFactory.Params
 import org.locationtech.geomesa.cassandra.jobs.CassandraJobUtils
 import org.locationtech.geomesa.index.conf.QueryHints._ //import everything from Query Hints
 import org.locationtech.geomesa.jobs.GeoMesaConfigurator
@@ -55,8 +56,8 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
         CqlConfigHelper.setInputCql(config, qp.tables.head)
       }
 
-      ConfigHelper.setInputInitialAddress(config, "localhost")
-      ConfigHelper.setInputColumnFamily(config, "geomesa_cassandra", "chicago")
+      ConfigHelper.setInputInitialAddress(config, dsParams("geomesa.cassandra.host"))
+      ConfigHelper.setInputColumnFamily(config, dsParams(Params.KeySpaceParam.getName), qp.tables.head)
       ConfigHelper.setInputPartitioner(config, "Murmur3Partitioner")
 
       GeoMesaConfigurator.setResultsToFeatures(config, qp.resultsToFeatures)

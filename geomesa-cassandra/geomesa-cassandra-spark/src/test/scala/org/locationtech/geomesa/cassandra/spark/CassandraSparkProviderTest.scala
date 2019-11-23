@@ -67,7 +67,8 @@ class CassandraSparkProviderTest extends Specification {
     params = Map(
       Params.ContactPointParam.getName -> s"$host:$port",
       Params.KeySpaceParam.getName -> "geomesa_cassandra",
-      Params.CatalogParam.getName -> "test_sft"
+      Params.CatalogParam.getName -> "test_sft",
+      "geomesa.cassandra.host" -> s"$host"
     )
     ds = DataStoreFinder.getDataStore(params).asInstanceOf[CassandraDataStore]
 
