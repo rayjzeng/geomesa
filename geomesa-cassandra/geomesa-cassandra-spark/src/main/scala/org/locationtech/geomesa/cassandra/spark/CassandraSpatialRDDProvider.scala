@@ -8,24 +8,20 @@
 
 package org.locationtech.geomesa.cassandra.spark
 
+import com.datastax.driver.core.RegularStatement
 import com.typesafe.scalalogging.LazyLogging
-
 import org.apache.cassandra.hadoop.ConfigHelper
 import org.apache.cassandra.hadoop.cql3.CqlConfigHelper
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
-
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-
 import org.geotools.data.{Query, Transaction}
 import org.opengis.feature.simple.SimpleFeature
-
 import org.locationtech.geomesa.cassandra.data.{CassandraDataStore, CassandraDataStoreFactory, CassandraQueryPlan, EmptyPlan}
 import org.locationtech.geomesa.cassandra.data.CassandraDataStoreFactory.Params
 import org.locationtech.geomesa.cassandra.jobs.CassandraJobUtils
-import org.locationtech.geomesa.index.conf.QueryHints._ //import everything from Query Hints
+import org.locationtech.geomesa.index.conf.QueryHints._
 import org.locationtech.geomesa.jobs.GeoMesaConfigurator
 import org.locationtech.geomesa.spark.{DataStoreConnector, SpatialRDD, SpatialRDDProvider}
 import org.locationtech.geomesa.utils.geotools.FeatureUtils
@@ -54,21 +50,25 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
         sc.emptyRDD[SimpleFeature]
       }
 
+//      if (qp.ranges.size == 1) {
+//        qp.ranges.head match {
+//          case stmt: RegularStatement => CqlConfigHelper.setInputCql(config, stmt.getQueryString)
+//          case _ => throw new IllegalArgumentException
+//        }
+//      } else {
+//        throw new IndexOutOfBoundsException
+//      }
+
       ConfigHelper.setInputInitialAddress(config, dsParams("geomesa.cassandra.host"))
       ConfigHelper.setInputColumnFamily(config, dsParams(Params.KeySpaceParam.getName), qp.tables.head)
       ConfigHelper.setInputPartitioner(config, "Murmur3Partitioner")
 
-      GeoMesaConfigurator.setResultsToFeatures(config, qp.resultsToFeatures)
-      qp.reducer.foreach(GeoMesaConfigurator.setReducer(config,_))
       GeoMesaConfigurator.setFilter(config, qp.filter.toString)
-      if (qp.projection.isDefined) {
-        GeoMesaConfigurator.setProjection(config, qp.projection.get)
-      }
-      if (qp.sort.isDefined) {
-        GeoMesaConfigurator.setSorting(config, qp.sort.get)
-      }
+      GeoMesaConfigurator.setResultsToFeatures(config, qp.resultsToFeatures)
 
-//      CqlConfigHelper.setInputWhereClauses(config, qp.clientSideFilter.get.toString) // ???
+      qp.reducer.foreach(GeoMesaConfigurator.setReducer(config,_))
+      qp.projection.foreach(GeoMesaConfigurator.setProjection(config,_))
+      qp.sort.foreach(GeoMesaConfigurator.setSorting(config,_))
 
       sc.newAPIHadoopRDD(config, classOf[GeoMesaCassandraInputFormat], classOf[Text], classOf[SimpleFeature]).map(_._2)
     }
