@@ -68,6 +68,8 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
         GeoMesaConfigurator.setSorting(config, qp.sort.get)
       }
 
+//      CqlConfigHelper.setInputWhereClauses(config, qp.clientSideFilter.get.toString) // ???
+
       sc.newAPIHadoopRDD(config, classOf[GeoMesaCassandraInputFormat], classOf[Text], classOf[SimpleFeature]).map(_._2)
     }
 
