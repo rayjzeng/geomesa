@@ -50,14 +50,17 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
         sc.emptyRDD[SimpleFeature]
       }
 
-//      if (qp.ranges.size == 1) {
-//        qp.ranges.head match {
-//          case stmt: RegularStatement => CqlConfigHelper.setInputCql(config, stmt.getQueryString)
-//          case _ => throw new IllegalArgumentException
-//        }
-//      } else {
-//        throw new IndexOutOfBoundsException
-//      }
+      if (qp.ranges.size == 1) {
+        qp.ranges.head match {
+          case stmt: RegularStatement => CqlConfigHelper.setInputCql(
+            config,
+            stmt.getQueryString
+          )
+          case _ => throw new IllegalArgumentException
+        }
+      } else {
+        throw new IndexOutOfBoundsException
+      }
 
       ConfigHelper.setInputInitialAddress(config, dsParams("geomesa.cassandra.host"))
       ConfigHelper.setInputColumnFamily(config, dsParams(Params.KeySpaceParam.getName), qp.tables.head)
