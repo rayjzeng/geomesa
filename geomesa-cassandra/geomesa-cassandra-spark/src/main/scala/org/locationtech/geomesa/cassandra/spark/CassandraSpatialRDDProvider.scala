@@ -27,8 +27,6 @@ import org.locationtech.geomesa.spark.{DataStoreConnector, SpatialRDD, SpatialRD
 import org.locationtech.geomesa.utils.geotools.FeatureUtils
 import org.locationtech.geomesa.utils.io.{WithClose, WithStore}
 
-
-
 class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
 
   override def canProcess(params: java.util.Map[String, _ <: java.io.Serializable]): Boolean = {
@@ -45,11 +43,21 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
     lazy val sft = ds.getSchema(origQuery.getTypeName)
 
     def queryPlanToRdd(qp: CassandraQueryPlan) : RDD[SimpleFeature] = {
+      /*
+       * Map function from query plan to RDD.
+       */
       val config = new Configuration(conf)
       if (ds == null || sft == null || qp.isInstanceOf[EmptyPlan]) {
         sc.emptyRDD[SimpleFeature]
       }
 
+      // BEGIN: Attempting to set CQL
+      // We attempt to set Cql from the ranges field from the query plan. However, the CQL from the
+      // query plan is not in the format expected by the delegate of the GeoMesaCassandraInputFormat.
+      // See CassandraRecordReader in GeoMesaCassandraInputFormat for more information.
+      //
+      // Commenting out this section will allow the CassandraSparkProviderTest to pass but we are
+      // unsure if the implementation will generalize to all queries.
       if (qp.ranges.size == 1) {
         qp.ranges.head match {
           case stmt: RegularStatement => CqlConfigHelper.setInputCql(
@@ -61,6 +69,7 @@ class CassandraSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
       } else {
         throw new IndexOutOfBoundsException
       }
+      // END: Attempting to set CQL
 
       ConfigHelper.setInputInitialAddress(config, dsParams("geomesa.cassandra.host"))
       ConfigHelper.setInputColumnFamily(config, dsParams(Params.KeySpaceParam.getName), qp.tables.head)

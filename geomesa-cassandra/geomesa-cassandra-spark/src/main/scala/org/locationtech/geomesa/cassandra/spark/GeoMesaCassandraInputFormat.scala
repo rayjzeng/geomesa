@@ -11,10 +11,6 @@ import com.datastax.driver.core.Row
 import org.locationtech.geomesa.jobs.GeoMesaConfigurator
 import org.locationtech.geomesa.index.api.QueryPlan.ResultsToFeatures
 
-//
-//  TODO:
-// - Implement Cassandra adapted RecordReader
-
 class GeoMesaCassandraInputFormat extends InputFormat[Text, SimpleFeature] with LazyLogging{
   private val delegate = new CqlInputFormat
 
@@ -44,6 +40,16 @@ class GeoMesaCassandraInputFormat extends InputFormat[Text, SimpleFeature] with 
     private var currentFeature: SimpleFeature = _
 
     override def initialize(inputSplit: InputSplit, taskAttemptContext: TaskAttemptContext): Unit =
+      // This line attempts to initialize an instance of org/apache/cassandra/hadoop/cql3/CqlRecordReader.java
+      //
+      // On the version from org/apache/cassandra/cassandra-all/3.0.0/cassandra-all-3.0.0-sources.jar this
+      // currently fails when running the CassandraSparkProviderTest. On line 271 in the CqlRecordReader, the
+      // function expects a query with a where clause must include an expression of the form:
+      // token(partition_key1 ... partition_keyn) > ? and token(partition_key1 ... partition_keyn) >= ?
+      //
+      // The CQL set from the CassandraQueryPlan does not conform to this constraint. Letting the CqlRecordReader
+      // infer the query from context and not explicitly setting the CQL allows the CassandraSparkProviderTest to
+      // pass, but we are unsure if that method will generalize to all queries.
       reader.initialize(inputSplit, taskAttemptContext)
 
     override def getProgress: Float = reader.getProgress

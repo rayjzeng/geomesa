@@ -63,7 +63,7 @@ class CassandraSparkProviderTest extends Specification {
     val cqlDataLoader = new CQLDataLoader(session)
     cqlDataLoader.load(new ClassPathCQLDataSet("init.cql", false, false))
 
-    // add geotools flag to param map for Spark
+    // add parameters to point to Cassandra
     params = Map(
       Params.ContactPointParam.getName -> s"$host:$port",
       Params.KeySpaceParam.getName -> "geomesa_cassandra",
@@ -79,10 +79,12 @@ class CassandraSparkProviderTest extends Specification {
     sc = SparkContext.getOrCreate(conf)
   }
 
+  // Define feature schema
   lazy val chicagoSft =
     SimpleFeatureTypes.createType("chicago",
       "arrest:String,case_number:Int,dtg:Date,*geom:Point:srid=4326")
 
+  // Make test features
   lazy val chicagoFeatures: Seq[SimpleFeature] = Seq(
     ScalaSimpleFeature.create(chicagoSft, "1", "true", 1, "2016-01-01T00:00:00.000Z", "POINT (-76.5 38.5)"),
     ScalaSimpleFeature.create(chicagoSft, "2", "true", 2, "2016-01-02T00:00:00.000Z", "POINT (-77.0 38.0)"),
