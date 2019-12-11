@@ -47,7 +47,10 @@ class GeoMesaCassandraInputFormat extends InputFormat[Text, SimpleFeature] with 
       // function expects a query with a where clause must include an expression of the form:
       // token(partition_key1 ... partition_keyn) > ? and token(partition_key1 ... partition_keyn) >= ?
       //
-      // The CQL set from the CassandraQueryPlan does not conform to this constraint. Letting the CqlRecordReader
+      // The CQL set from the CassandraQueryPlan does not conform to this constraint resulting in the following error:
+      // com.datastax.driver.core.exceptions.InvalidQueryException: Invalid amount of bind variables.
+      //
+      // Letting the CqlRecordReader
       // infer the query from context and not explicitly setting the CQL allows the CassandraSparkProviderTest to
       // pass, but we are unsure if that method will generalize to all queries.
       reader.initialize(inputSplit, taskAttemptContext)
